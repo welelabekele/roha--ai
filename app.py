@@ -146,7 +146,7 @@ def check_proposal(proposal: Proposal, question: dict):
 
 
 def proposal_schema(question: dict):
-    reply = {'type': 'string', 'minLength': 1, 'maxLength': 180}
+    reply = {'type': 'string', 'minLength': 1, 'maxLength': 90}
     answer = {'type': 'string', 'minLength': 1, 'maxLength': 1000}
     if question['choices']:
         answer['enum'] = question['choices']
@@ -171,7 +171,7 @@ async def ask_ollama(turn: Turn, question: dict) -> Proposal:
         'If ambiguous, clarify. For a correction without a replacement, clarify. For simple wording, explain '
         'only the supplied question. For missing ID, partner_referral is an available choice, not a completed '
         'referral. For submit, return review. Answer briefly in the requested language; if unable, say so honestly. '
-        'Use propose_answer only for an explicit answer or an unambiguous requested choice. '
+        'Use propose_answer only with an actual nonempty value chosen by the learner. For questions about missing documents, explain the referral option and ask first. Other actions require value:null. Reply in one short sentence. '
         'A propose_answer MUST contain the actual nonempty answer in value. '
         'Every other action MUST have value:null. Reply in one short sentence. '
         'Saying "I have no documents, what can I do?" asks about options; explain partner referral '
@@ -185,11 +185,21 @@ async def ask_ollama(turn: Turn, question: dict) -> Proposal:
                'messages': [{'role': 'system', 'content': instructions},
                             *[h.model_dump() for h in turn.history],
                             {'role': 'user', 'content': turn.message}],
-               'options': {'temperature': 0, 'num_ctx': 2048, 'num_predict': 220}}
+               'options': {'temperature': 0, 'num_ctx': 2048, 'num_predict': (640 if turn.language in ('am', 'ti') else 320)}}
     async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
         response = await client.post(BASE + '/api/chat', json=payload)
         response.raise_for_status()
-        return check_proposal(Proposal.model_validate_json(response.json()['message']['content']), question)
+        data = response.json()
+        print("Roha generation:", {
+            "language": turn.language,
+            "done_reason": data.get("done_reason"),
+            "tokens": data.get("eval_count")
+        }, flush=True)
+        if data.get("done_reason") == "length":
+            raise ValueError("Model output was cut off at its token limit.")
+        return check_proposal(
+            Proposal.model_validate_json(data["message"]["content"]), question)
+
 
 
 @app.get('/health')

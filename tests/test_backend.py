@@ -125,7 +125,7 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(result.action, 'clarify')
         self.assertFalse(captured[0]['think'])
         self.assertEqual(captured[0]['keep_alive'], 0)
-        self.assertEqual(captured[0]['format']['additionalProperties'], False)
+        self.assertTrue(all(b['additionalProperties'] is False for b in captured[0]['format']['anyOf']))
         self.assertNotIn('tools', captured[0])
 
 

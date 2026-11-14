@@ -1,0 +1,9 @@
+﻿file,language,text_sent_to_synthesizer,intended_english_meaning,native_speaker_validated
+en_repeat.wav,en-us,Hello Roha. Please repeat the question.,Hello Roha. Please repeat the question.,no
+en_no_id.wav,en-us,I do not have an identity document. Please explain my options.,I do not have an identity document. Please explain my options.,no
+am_no_id.wav,am,መታወቂያ የለኝም።,I do not have an identity document.,no
+am_repeat.wav,am,እባክህ ጥያቄውን ድገመው።,Please repeat the question.,no
+om_no_id.wav,om,Waraqaa eenyummaa hin qabu.,I do not have an identity document.,no
+om_repeat.wav,om,Maaloo irra deebi'i.,Please repeat.,no
+ti_name.wav,ti,ሰላም። ስመይ ሳራ እዩ።,Hello. My name is Sara.,no
+ti_repeat.wav,ti,በጃኻ ድገመለይ።,Please repeat for me.,no
