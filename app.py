@@ -145,6 +145,22 @@ def check_proposal(proposal: Proposal, question: dict):
     return proposal
 
 
+def proposal_schema(question: dict):
+    reply = {'type': 'string', 'minLength': 1, 'maxLength': 180}
+    answer = {'type': 'string', 'minLength': 1, 'maxLength': 1000}
+    if question['choices']:
+        answer['enum'] = question['choices']
+    def branch(actions, value):
+        return {'type': 'object', 'additionalProperties': False,
+                'properties': {'action': {'type': 'string', 'enum': actions},
+                               'reply': reply, 'value': value},
+                'required': ['action', 'reply', 'value']}
+    return {'anyOf': [
+        branch(['propose_answer'], answer),
+        branch(['clarify', 'explain', 'back', 'repeat', 'larger_text', 'save_draft', 'review'],
+               {'type': 'null'})]}
+
+
 async def ask_ollama(turn: Turn, question: dict) -> Proposal:
     instructions = (
         'You are Roha, an accessible form assistant. Interpret ONLY the current learner request. '
@@ -156,16 +172,21 @@ async def ask_ollama(turn: Turn, question: dict) -> Proposal:
         'only the supplied question. For missing ID, partner_referral is an available choice, not a completed '
         'referral. For submit, return review. Answer briefly in the requested language; if unable, say so honestly. '
         'Use propose_answer only for an explicit answer or an unambiguous requested choice. '
+        'A propose_answer MUST contain the actual nonempty answer in value. '
+        'Every other action MUST have value:null. Reply in one short sentence. '
+        'Saying "I have no documents, what can I do?" asks about options; explain partner referral '
+        'and ask whether they want it. Do not select it without their choice. '
         f'Requested reply language: {LANGUAGES[turn.language]["name"]}. '
         f'Approved current question: {json.dumps(question, ensure_ascii=False)}'
     )
-    payload = {'model': MODEL, 'stream': False, 'think': False, 'keep_alive': 0,
-               'format': Proposal.model_json_schema(),
+    payload = {'model': MODEL, 'stream': False, 'think': False,
+               'keep_alive': 0 if os.getenv('ROHA_STT_ENABLED') == '1' else '2m',
+               'format': proposal_schema(question),
                'messages': [{'role': 'system', 'content': instructions},
                             *[h.model_dump() for h in turn.history],
                             {'role': 'user', 'content': turn.message}],
                'options': {'temperature': 0, 'num_ctx': 2048, 'num_predict': 220}}
-    async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
+    async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
         response = await client.post(BASE + '/api/chat', json=payload)
         response.raise_for_status()
         return check_proposal(Proposal.model_validate_json(response.json()['message']['content']), question)
@@ -219,7 +240,11 @@ async def turn_endpoint(turn: Turn):
         try:
             proposal = await ask_ollama(turn, TASKS[turn.task][turn.field])
             return result(proposal, turn, 'ollama')
-        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+            if isinstance(error, ValueError) and str(error) in (
+                    'An answer requires a value.', 'The answer is not an allowed choice.'):
+                recovery = Proposal(action='clarify', reply='I could not confirm an answer. Please choose an option or say the exact answer you want to use.')
+                return result(recovery, turn, 'validation_recovery')
             fallback = Proposal(action='clarify', reply='AI help is unavailable. You can still answer, edit, or use the form controls. Please try a shorter request.')
             return result(fallback, turn, 'fallback')
 
