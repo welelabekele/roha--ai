@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roha backend test</title>
+<style>
+body{font:1.1rem/1.6 system-ui,sans-serif;max-width:44rem;margin:auto;padding:1.2rem;color:#173239;background:#f8faf9}
+label{display:block;margin-top:1rem;font-weight:650}input,select,textarea,button{font:inherit;padding:.65rem;border:2px solid #546d70;border-radius:.4rem;max-width:100%;box-sizing:border-box}input,textarea,select{width:100%}button{margin:.5rem .3rem .5rem 0;background:#fff;color:#143f3e;cursor:pointer;min-height:44px}:focus-visible{outline:3px solid #8a3a00;outline-offset:3px}pre{white-space:pre-wrap;overflow-wrap:anywhere}#consent{width:auto}small{display:block}
+</style>
+<main><h1>Roha backend test</h1>
+<p>This page tests inference. It does not register or submit applications. Language quality requires testing with speakers.</p>
+<label for="token">Server token for this private developer test</label><input type="password" id="token" autocomplete="off">
+<small>Kept in this page's memory only. Never put this token in a public plugin.</small>
+<button id="status">Check model status</button>
+<label for="language">Language</label><select id="language"><option value="en">English</option><option value="am">አማርኛ — Amharic</option><option value="om">Afaan Oromo</option><option value="ti">ትግርኛ — Tigrinya</option></select>
+<label for="field">Current registration question</label><select id="field"><option value="idRoute">Document or referral route</option><option value="name">Full name</option><option value="phone">Phone number</option></select>
+<label for="message">Your answer or request</label><textarea id="message" rows="4" maxlength="1500"></textarea>
+<button id="record">Record up to 30 seconds</button><button id="stop" disabled>Stop recording</button>
+<div><input type="checkbox" id="consent"><label for="consent" style="display:inline;font-weight:400">I agree to send this recording to this server for transcription.</label></div>
+<button id="transcribe" disabled>Transcribe recording</button>
+<small>Transcription replaces the text above for your review. It is not sent to the LLM until you choose Ask Roha.</small>
+<button id="ask">Ask Roha</button><button id="speak">Read reply using an installed voice</button>
+<p id="notice" role="status" aria-live="polite"></p><h2>Proposed response</h2><p id="reply" dir="auto"></p><pre id="output"></pre>
+</main><script>
+const $=id=>document.getElementById(id);let recorder,stream,audio,timer;let lastReply='';
+const locales={en:'en-US',am:'am-ET',om:'om-ET',ti:'ti-ET'};
+async function request(path,body){const response=await fetch(path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+$('token').value,...(body instanceof FormData?{}:body?{'Content-Type':'application/json'}:{})},body:body instanceof FormData?body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Check the request and try again.');return data;}
+async function run(task){$('notice').textContent='Working…';try{await task();$('notice').textContent='Ready. Review the result.';}catch(e){$('notice').textContent=e.message;}}
+$('status').onclick=()=>run(async()=>{$('output').textContent=JSON.stringify(await request('/v1/status'),null,2);});
+$('ask').onclick=()=>run(async()=>{const data=await request('/v1/turn',{language:$('language').value,field:$('field').value,message:$('message').value});lastReply=data.reply;$('reply').textContent=data.reply;$('reply').lang=data.reply_language;$('output').textContent=JSON.stringify(data,null,2);});
+$('record').onclick=async()=>{try{if(!navigator.mediaDevices||!window.MediaRecorder)throw Error('Recording is unavailable. Type your answer.');stream=await navigator.mediaDevices.getUserMedia({audio:true});const parts=[];audio=null;$('transcribe').disabled=true;recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)parts.push(e.data);};recorder.onstop=()=>{clearTimeout(timer);stream.getTracks().forEach(t=>t.stop());audio=new Blob(parts,{type:recorder.mimeType});$('record').disabled=false;$('stop').disabled=true;$('transcribe').disabled=false;$('notice').textContent='Recording stopped. Choose whether to send it for transcription.';};recorder.start();$('record').disabled=true;$('stop').disabled=false;$('notice').textContent='Microphone on. Recording…';timer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},30000);}catch(e){if(stream)stream.getTracks().forEach(t=>t.stop());$('notice').textContent=e.message;}};
+$('stop').onclick=()=>{if(recorder?.state==='recording')recorder.stop();};
+$('transcribe').onclick=()=>run(async()=>{if(!$('consent').checked)throw Error('Please choose whether you agree to audio processing.');if(!audio)throw Error('Record an answer first.');const form=new FormData();form.append('audio',audio,'recording');form.append('language',$('language').value);form.append('consent','true');const data=await request('/v1/transcribe',form);$('message').value=data.text;$('message').focus();audio=null;$('transcribe').disabled=true;$('consent').checked=false;});
+$('speak').onclick=()=>{if(!lastReply)return;if(!window.speechSynthesis){$('notice').textContent='Read-aloud is unavailable on this device.';return;}const lang=$('reply').lang||$('language').value;const voice=speechSynthesis.getVoices().find(v=>v.lang.toLowerCase().startsWith(lang));if(!voice){$('notice').textContent='No matching installed voice was found. Use recorded question audio in Roha.';return;}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(lastReply);utterance.lang=locales[lang]||lang;utterance.voice=voice;speechSynthesis.speak(utterance);};
+addEventListener('pagehide',()=>{clearTimeout(timer);if(stream)stream.getTracks().forEach(t=>t.stop());if(window.speechSynthesis)speechSynthesis.cancel();});
+</script></html>

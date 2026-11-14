@@ -1,0 +1,11 @@
+{
+  "name": "Roha CPU AI backend",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "hostRequirements": {"cpus": 2, "memory": "8gb"},
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {"label": "Roha API and test page", "onAutoForward": "notify"},
+    "11434": {"label": "PRIVATE Ollama", "onAutoForward": "ignore"}
+  },
+  "postCreateCommand": "bash scripts/setup.sh"
+}
