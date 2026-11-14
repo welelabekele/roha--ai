@@ -1,0 +1,13 @@
+Roha inference fix
+
+Stop the API with Ctrl+C in the terminal running scripts/start.sh.
+Replace ONLY app.py and scripts/smoke.py in /workspaces/roha--ai using the files in this ZIP.
+Do not change or upload .env.
+Restart: bash scripts/start.sh
+In a second terminal: .venv/bin/python scripts/smoke.py
+
+Fixes: conditional schema requiring actual values for answer proposals; short replies; clear clarification on invalid answer values; two-minute model retention for text-only mode; longer processing and smoke-test limits.
+
+The patch passed 24 mocked backend tests and six independent JSON Schema cases. It has not been run against your actual Codespace model. Model speed and language quality need live verification.
+
+A source of validation_recovery is an explicit clarification after an invalid model answer, not a successful model answer. The smoke test intentionally does not count it as success.
